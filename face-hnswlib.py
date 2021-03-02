@@ -1,35 +1,16 @@
 """
-This is an example of using the k-nearest-neighbors (KNN) algorithm for face recognition.
-When should I use this example?
-This example is useful when you wish to recognize a large set of known people,
-and make a prediction for an unknown person in a feasible computation time.
-Algorithm Description:
-The knn classifier is first trained on a set of labeled (known) faces and can then predict the person
-in a live stream by finding the k most similar faces (images with closet face-features under euclidean distance)
-in its training set, and performing a majority vote (possibly weighted) on their label.
-For example, if k=3, and the three closest face images to the given image in the training set are one image of Biden
-and two images of Obama, The result would be 'Obama'.
-* This implementation uses a weighted vote, such that the votes of closer-neighbors are weighted more heavily.
-Usage:
-1. Prepare a set of images of the known people you want to recognize. Organize the images in a single directory
-   with a sub-directory for each known person.
-2. Then, call the 'train' function with the appropriate parameters. Make sure to pass in the 'model_save_path' if you
-   want to save the model to disk so you can re-use the model without having to re-train it.
-3. Call 'predict' and pass in your trained model to recognize the people in a live video stream.
-NOTE: This example requires scikit-learn, opencv and numpy to be installed! You can install it with pip:
-$ pip3 install scikit-learn
-$ pip3 install numpy
-$ pip3 install opencv-contrib-python
+
 """
 
 import cv2
 import math
-from sklearn import neighbors
 import os
 import os.path
 import pickle
 from PIL import Image, ImageDraw
 import face_recognition
+import hnswlib
+import threading
 from face_recognition.face_recognition_cli import image_files_in_folder
 import numpy as np
 
@@ -37,11 +18,68 @@ import numpy as np
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'JPG'}
 
 
-def train(train_dir, model_save_path=None, n_neighbors=None, knn_algo='ball_tree', verbose=False):
+class Index:
+    def __init__(self, space, dim):
+        self.index = hnswlib.Index(space, dim)
+        self.lock = threading.Lock()
+        self.dict_labels = {}
+        self.cur_ind = 0
+
+    def init_index(self, max_elements, ef_construction=200, M=16):
+        self.index.init_index(max_elements=max_elements, ef_construction=ef_construction, M=M)
+
+    def add_items(self, data, ids=None):
+        if ids is not None:
+            assert len(data) == len(ids)
+        num_added = len(data)
+        with self.lock:
+            start = self.cur_ind
+            self.cur_ind += num_added
+        int_labels = []
+
+        if ids is not None:
+            for dl in ids:
+                int_labels.append(start)
+                self.dict_labels[start] = dl
+                start += 1
+        else:
+            for _ in range(len(data)):
+                int_labels.append(start)
+                self.dict_labels[start] = start
+                start += 1
+        self.index.add_items(data=data, ids=np.asarray(int_labels))
+
+    def set_ef(self, ef):
+        self.index.set_ef(ef)
+
+    def load_index(self, path):
+        self.index.load_index(path)
+        with open(path + ".pkl", "rb") as f:
+            self.cur_ind, self.dict_labels = pickle.load(f)
+
+    def save_index(self, path):
+        self.index.save_index(path)
+        with open(path + ".pkl", "wb") as f:
+            pickle.dump((self.cur_ind, self.dict_labels), f)
+
+    def set_num_threads(self, num_threads):
+        self.index.set_num_threads(num_threads)
+
+    def knn_query(self, data, k=1):
+        labels_int, distances = self.index.knn_query(data=data, k=k)
+        labels = []
+        for li in labels_int:
+            line = []
+            for l in li:
+                line.append(self.dict_labels[l])
+            labels.append(line)
+        return labels, distances
+
+
+def train(train_dir, model_save_path=None, n_neighbors=1, knn_algo='ball_tree', verbose=False):
     """
-    Trains a k-nearest neighbors classifier for face recognition.
+    Trains a knn classifier for face recognition.
     :param train_dir: directory that contains a sub-directory for each known person, with its name.
-     (View in source code to see train_dir example tree structure)
      Structure:
         <train_dir>/
         ├── <person1>/
@@ -87,6 +125,7 @@ def train(train_dir, model_save_path=None, n_neighbors=None, knn_algo='ball_tree
             print("Chose n_neighbors automatically:", n_neighbors)
 
     # Create and train the KNN classifier
+    # TODO Define class and fitting
     knn_clf = neighbors.KNeighborsClassifier(n_neighbors=n_neighbors, algorithm=knn_algo, weights='distance')
     knn_clf.fit(X, y)
 
