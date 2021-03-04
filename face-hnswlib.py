@@ -130,8 +130,19 @@ def train(train_dir, model_save_path=None, num_threads=4, verbose=False):
 
     return model
 
-#TODO: change prediction function
-def predict(X_frame, knn_clf=None, model_path=None, distance_threshold=0.5):
+# TODO: change prediction function
+
+
+def load_model(model, model_path):
+    """
+    Loads saved index of the created model
+    :param model: model instance
+    :param model_path: path to index
+    """
+    model.load_index(model_path)
+
+
+def predict(X_frame, model=None):
     """
     Recognizes faces in given image using a trained KNN classifier
     :param X_frame: frame to do the prediction on.
@@ -142,13 +153,9 @@ def predict(X_frame, knn_clf=None, model_path=None, distance_threshold=0.5):
     :return: a list of names and face locations for the recognized faces in the image: [(name, bounding box), ...].
         For faces of unrecognized persons, the name 'unknown' will be returned.
     """
-    if knn_clf is None and model_path is None:
-        raise Exception("Must supply knn classifier either thourgh knn_clf or model_path")
+    if model is None:
+        raise Exception("Must supply knn_clf")
 
-    # Load a trained KNN model (if one was passed in)
-    if knn_clf is None:
-        with open(model_path, 'rb') as f:
-            knn_clf = pickle.load(f)
 
     X_face_locations = face_recognition.face_locations(X_frame)
 
