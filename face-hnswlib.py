@@ -173,7 +173,6 @@ def predict(model, X_frame, distance_threshold=0.6):
     return [(pred, loc) if rec else ("unknown", loc) for pred, loc, rec in zip(labels, X_face_locations, are_matches)]
 
 
-
 def show_prediction_labels_on_image(frame, predictions):
     """
     Shows the face recognition results visually.
@@ -212,7 +211,7 @@ def show_prediction_labels_on_image(frame, predictions):
 
 if __name__ == "__main__":
     print("Training KNN classifier...")
-    classifier = train("knn_examples/train", model_save_path="trained_knn_model.clf", n_neighbors=2)
+    # classifier = train("knn_examples/train", model_save_path="trained_knn_model.clf", n_neighbors=2)
     print("Training complete!")
     # process one frame in every 30 frames for speed
     process_this_frame = 29
@@ -220,7 +219,7 @@ if __name__ == "__main__":
     # multiple cameras can be used with the format url = 'http://username:password@camera_ip:port'
     url = 'http://admin:admin@192.168.0.106:8081/'
     cap = cv2.VideoCapture(url)
-    while 1 > 0:
+    while True:
         ret, frame = cap.read()
         if ret:
             # Different resizing options can be chosen based on desired program runtime.
@@ -228,6 +227,7 @@ if __name__ == "__main__":
             img = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
             process_this_frame = process_this_frame + 1
             if process_this_frame % 30 == 0:
+                # TODO: make predictions
                 predictions = predict(img, model_path="trained_knn_model.clf")
             frame = show_prediction_labels_on_image(frame, predictions)
             cv2.imshow('camera', frame)
